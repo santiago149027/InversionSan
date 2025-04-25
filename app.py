@@ -169,14 +169,15 @@ for ticker, sector in acciones.items():
             "Recomendación": f"⚠️ Error: {str(e)}"
         })
 
-# Mostrar resultados por sector
+# Mostrar resultados por sector (CORREGIDO)
 df_resultados = pd.DataFrame(resultados)
 sectores = df_resultados["Sector"].unique()
 
 for sector in sorted(sectores):
     st.subheader(f"📂 Sector: {sector}")
     st.dataframe(
-        df_resultados[df_resultados["Sector"] == sector][["Precio actual", "Variación (%)", "Recomendación"]].set_index("Ticker")
+        df_resultados[df_resultados["Sector"] == sector]
+        .set_index("Ticker")[["Precio actual", "Variación (%)", "Recomendación"]]
     )
 
 # Explicación
