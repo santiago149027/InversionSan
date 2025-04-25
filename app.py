@@ -80,10 +80,10 @@ def preparar_datos(ticker):
     if df.empty or "Close" not in df.columns:
         return None, None, None
 
-    close = df["Close"].squeeze()
-    high = df["High"].squeeze()
-    low = df["Low"].squeeze()
-    volume = df["Volume"].squeeze()
+    close = df["Close"]
+    high = df["High"]
+    low = df["Low"]
+    volume = df["Volume"]
 
     df["RSI"] = RSIIndicator(close=close).rsi()
     macd = MACD(close=close)
@@ -122,10 +122,10 @@ def preparar_datos(ticker):
 
     return df, precio_actual, variacion
 
-# Configurar página
+# Configurar Streamlit
 st.set_page_config(page_title="Dashboard de Señales de Trading", layout="wide")
 st.title("📈 Dashboard de Recomendaciones de Trading")
-st.caption("Modelo basado en NVDA, señales: 📈 Comprar, ➖ Mantener, 🔻 Vender")
+st.caption("Modelo basado en NVDA: 📈 Comprar / ➖ Mantener / 🔻 Vender")
 
 # Procesar acciones
 resultados = []
@@ -171,7 +171,6 @@ for ticker, sector in acciones.items():
 
 # Mostrar resultados por sector
 df_resultados = pd.DataFrame(resultados)
-
 sectores = df_resultados["Sector"].unique()
 
 for sector in sorted(sectores):
@@ -180,13 +179,13 @@ for sector in sorted(sectores):
         df_resultados[df_resultados["Sector"] == sector][["Precio actual", "Variación (%)", "Recomendación"]].set_index("Ticker")
     )
 
-# Explicación del modelo
+# Explicación
 st.markdown("""
 ---
 🧠 **¿Cómo funciona este modelo?**  
 Este sistema de IA analiza 15 indicadores técnicos y evalúa la probabilidad de que una acción suba o baje en los próximos 5 días.
 
 - 📈 **Comprar** → Si se espera que el precio suba más de +1%
-- 🔻 **Vender** → Si se espera que el precio baje más de -1%
+- 🔻 **Vender** → Si se espera que baje más de -1%
 - ➖ **Mantener** → Si se espera que fluctúe dentro de ±1%
 """)
