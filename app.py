@@ -8,13 +8,64 @@ from ta.momentum import RSIIndicator, ROCIndicator
 from ta.trend import MACD, SMAIndicator, EMAIndicator, CCIIndicator, ADXIndicator
 from ta.volatility import BollingerBands, AverageTrueRange
 
-# Cargar el modelo
-best_model = joblib.load("modelo_nvda.pkl")
+# Cargar modelo multiclase
+best_model_multiclase = joblib.load("modelo_nvda_multiclase.pkl")
 
-# Lista de acciones: Magnificent 7
-tickers = ["NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "TSLA"]
+# Tickers y sectores asignados
+acciones = {
+    "NVDA": "Tecnología",
+    "AAPL": "Tecnología",
+    "MSFT": "Tecnología",
+    "AMZN": "Consumo",
+    "META": "Tecnología",
+    "GOOGL": "Tecnología",
+    "TSLA": "Consumo / Industrial",
+    "ASML": "Tecnología",
+    "VST": "Energía / Utilities",
+    "TSM": "Tecnología",
+    "NFLX": "Consumo / Media",
+    "PLTR": "Tecnología",
+    "GEV": "Energía",
+    "HIMS": "Salud",
+    "HOOD": "Financiero / Tecnología",
+    "TEM": "Tecnología",
+    "JPM": "Financiero",
+    "LLY": "Salud",
+    "AVGO": "Tecnología",
+    "COIN": "Financiero / Cripto",
+    "COST": "Consumo",
+    "CRM": "Tecnología",
+    "CSCO": "Tecnología",
+    "DIS": "Consumo / Media",
+    "ROST": "Consumo",
+    "T": "Telecomunicaciones",
+    "V": "Financiero",
+    "MA": "Financiero",
+    "SHOP": "Consumo",
+    "WMT": "Consumo",
+    "BITB": "Cripto",
+    "MELI": "Consumo",
+    "BABA": "Consumo / Tecnología",
+    "PYPL": "Financiero / Tecnología",
+    "CMG": "Consumo",
+    "AMAT": "Tecnología",
+    "CMCSA": "Telecomunicaciones",
+    "A": "Tecnología",
+    "FBTC": "Cripto",
+    "BLK": "Financiero",
+    "BRK-B": "Financiero",
+    "CTSH": "Tecnología",
+    "EPAM": "Tecnología",
+    "IXN": "ETF Tecnología",
+    "LMT": "Industrial / Defensa",
+    "MRNA": "Salud",
+    "HACK": "ETF Ciberseguridad",
+    "ROBO": "ETF Robótica",
+    "VCR": "ETF Consumo Discrecional",
+    "VHT": "ETF Salud"
+}
 
-# Indicadores requeridos
+# Features requeridos por el modelo
 features = [
     "RSI", "MACD", "MACD_Signal", "SMA_10", "EMA_10", "Momentum", "Volume",
     "bb_bbm", "bb_bbh", "bb_bbl", "bb_bandwidth",
@@ -24,12 +75,10 @@ features = [
 # Función para preparar datos
 def preparar_datos(ticker):
     df = yf.download(ticker, start="2018-01-01", end=datetime.today().strftime('%Y-%m-%d'), group_by='column')
-
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
-
     if df.empty or "Close" not in df.columns:
-        return None
+        return None, None, None
 
     close = df["Close"].squeeze()
     high = df["High"].squeeze()
@@ -43,22 +92,17 @@ def preparar_datos(ticker):
     df["SMA_10"] = SMAIndicator(close=close, window=10).sma_indicator()
     df["EMA_10"] = EMAIndicator(close=close, window=10).ema_indicator()
     df["Momentum"] = close.diff(4)
-
     bb = BollingerBands(close=close)
     df["bb_bbm"] = bb.bollinger_mavg()
     df["bb_bbh"] = bb.bollinger_hband()
     df["bb_bbl"] = bb.bollinger_lband()
     df["bb_bandwidth"] = df["bb_bbh"] - df["bb_bbl"]
-
     atr = AverageTrueRange(high=high, low=low, close=close)
     df["atr"] = atr.average_true_range()
-
     cci = CCIIndicator(high=high, low=low, close=close)
     df["cci"] = cci.cci()
-
     adx = ADXIndicator(high=high, low=low, close=close)
     df["adx"] = adx.adx()
-
     roc = ROCIndicator(close=close)
     df["roc"] = roc.roc()
 
@@ -69,30 +113,80 @@ def preparar_datos(ticker):
             df[col] = 0
 
     df = df[features].fillna(0)
-    return df
 
-# Interfaz de Streamlit
-st.set_page_config(page_title="Señales Magnificent 7", layout="wide")
-st.title("📊 Dashboard de Señales de Compra: Magnificent 7")
-st.caption("Modelo entrenado con NVDA")
+    precio_actual = round(close.iloc[-1], 2)
+    if len(close) > 1:
+        variacion = round(((close.iloc[-1] - close.iloc[-2]) / close.iloc[-2]) * 100, 2)
+    else:
+        variacion = None
 
-# Aplicar modelo
+    return df, precio_actual, variacion
+
+# Configurar página
+st.set_page_config(page_title="Dashboard de Señales de Trading", layout="wide")
+st.title("📈 Dashboard de Recomendaciones de Trading")
+st.caption("Modelo basado en NVDA, señales: 📈 Comprar, ➖ Mantener, 🔻 Vender")
+
+# Procesar acciones
 resultados = []
 
-for ticker in tickers:
-    df = preparar_datos(ticker)
+for ticker, sector in acciones.items():
+    df, precio, variacion = preparar_datos(ticker)
 
     if df is None or len(df) < 30:
-        resultados.append({"Ticker": ticker, "Recomendación": "❌ Datos insuficientes"})
+        resultados.append({
+            "Ticker": ticker,
+            "Sector": sector,
+            "Precio actual": "N/A",
+            "Variación (%)": "N/A",
+            "Recomendación": "❌ Datos insuficientes"
+        })
         continue
 
     try:
         latest_data = df.tail(1)
-        pred = best_model.predict(latest_data)[0]
-        señal = "📈 Comprar" if pred == 1 else "🚫 No comprar"
-        resultados.append({"Ticker": ticker, "Recomendación": señal})
-    except Exception as e:
-        resultados.append({"Ticker": ticker, "Recomendación": f"⚠️ Error: {str(e)}"})
+        pred = best_model_multiclase.predict(latest_data)[0]
+        if pred == 2:
+            señal = "📈 Comprar"
+        elif pred == 1:
+            señal = "➖ Mantener"
+        else:
+            señal = "🔻 Vender"
 
-# Mostrar resultados
-st.dataframe(pd.DataFrame(resultados).set_index("Ticker"))
+        resultados.append({
+            "Ticker": ticker,
+            "Sector": sector,
+            "Precio actual": f"${precio}",
+            "Variación (%)": f"{variacion}%",
+            "Recomendación": señal
+        })
+    except Exception as e:
+        resultados.append({
+            "Ticker": ticker,
+            "Sector": sector,
+            "Precio actual": "N/A",
+            "Variación (%)": "N/A",
+            "Recomendación": f"⚠️ Error: {str(e)}"
+        })
+
+# Mostrar resultados por sector
+df_resultados = pd.DataFrame(resultados)
+
+sectores = df_resultados["Sector"].unique()
+
+for sector in sorted(sectores):
+    st.subheader(f"📂 Sector: {sector}")
+    st.dataframe(
+        df_resultados[df_resultados["Sector"] == sector][["Precio actual", "Variación (%)", "Recomendación"]].set_index("Ticker")
+    )
+
+# Explicación del modelo
+st.markdown("""
+---
+🧠 **¿Cómo funciona este modelo?**  
+Este sistema de IA analiza 15 indicadores técnicos y evalúa la probabilidad de que una acción suba o baje en los próximos 5 días.
+
+- 📈 **Comprar** → Si se espera que el precio suba más de +1%
+- 🔻 **Vender** → Si se espera que el precio baje más de -1%
+- ➖ **Mantener** → Si se espera que fluctúe dentro de ±1%
+""")
